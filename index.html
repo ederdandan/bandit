@@ -1,0 +1,2451 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#78350F" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Fuga da Cela: Operação Contenção</title>
+
+  <!-- Manifesto PWA embutido via Blob para funcionar offline no GitHub Pages e simulador -->
+  <link id="pwa-manifest-link" rel="manifest" href="" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- PeerJS opcional para salas online P2P de 4 letras (com fallback seguro offline) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
+
+  <!-- Fontes de estilo HQ / Cartaz de Mesa -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      /* Tema 1 (Padrão): Clássico Mesa */
+      --table-bg: #5C3A21;
+      --table-grad: #855632;
+      --panel-bg: #FFFBEB;
+      --panel-card: #FEF3C7;
+      --panel-border: #1C1917;
+      --ink-primary: #1C1917;
+      --ink-secondary: #57534E;
+      --soil-dark: #291D16;
+      --soil-mid: #422D20;
+      --tunnel-sand: #FDE68A;
+      --tunnel-glow: #F59E0B;
+      --beam-wood: #B45309;
+      --brick-red: #B91C1C;
+      --accent-primary: #DC2626;
+      --accent-secondary: #0F766E;
+      --grid-line: rgba(254, 243, 199, 0.08);
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: var(--table-bg);
+      color: var(--ink-primary);
+    }
+
+    .font-comic {
+      font-family: 'Bangers', Impact, cursive, sans-serif;
+      letter-spacing: 0.04em;
+    }
+
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .comic-border {
+      border: 3px solid var(--panel-border);
+      box-shadow: 0 4px 0 var(--panel-border);
+    }
+
+    .comic-btn {
+      border: 2.5px solid var(--panel-border);
+      box-shadow: 0 3px 0 var(--panel-border);
+      transition: transform 0.09s ease, box-shadow 0.09s ease, filter 0.15s ease;
+    }
+
+    .comic-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 var(--panel-border);
+    }
+
+    .comic-panel {
+      background-color: var(--panel-bg);
+      color: var(--ink-primary);
+      border: 3px solid var(--panel-border);
+      box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35);
+    }
+
+    .comic-subcard {
+      background-color: var(--panel-card);
+      color: var(--ink-primary);
+      border: 2px solid var(--panel-border);
+    }
+
+    /* Área infinita do tabuleiro */
+    #board-viewport {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      overflow: hidden;
+      touch-action: none;
+      background: radial-gradient(circle at 50% 35%, var(--table-grad) 0%, var(--table-bg) 85%);
+    }
+
+    #board-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    /* Cartas da mão inferior */
+    .hand-card-slot {
+      position: relative;
+      flex: 0 0 auto;
+      width: 96px;
+      height: 78px;
+      border-radius: 12px;
+      border: 3px solid var(--panel-border);
+      box-shadow: 0 4px 0 var(--panel-border);
+      background: var(--soil-dark);
+      overflow: hidden;
+      cursor: grab;
+      touch-action: none;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .hand-card-slot.selected {
+      transform: translateY(-8px) scale(1.04);
+      border-color: #FACC15;
+      box-shadow: 0 7px 0 var(--panel-border), 0 0 18px rgba(250, 204, 21, 0.65);
+    }
+
+    @keyframes pulseRadar {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      50% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    }
+
+    .radar-pulse {
+      animation: pulseRadar 1.35s infinite;
+    }
+  </style>
+</head>
+<body class="flex flex-col">
+
+  <!-- =====================================================================
+       1. CABEÇALHO SUPERIOR COMPACTO & RESPONSIVO
+       ===================================================================== -->
+  <header class="z-20 px-2.5 py-1.5 flex items-center justify-between gap-1.5 comic-panel border-t-0 border-x-0 rounded-none">
+    <!-- Perfil do Jogador (Abre modal de perfil) -->
+    <button id="btn-open-profile" type="button" class="flex items-center gap-2 text-left min-w-0 comic-btn px-2 py-1 rounded-xl comic-subcard">
+      <div id="header-avatar" class="w-8 h-8 rounded-full overflow-hidden border-2 border-stone-900 bg-amber-200 flex items-center justify-center shrink-0"></div>
+      <div class="min-w-0">
+        <div id="header-agent-name" class="font-extrabold text-xs truncate max-w-[92px] sm:max-w-[130px]">Agente</div>
+        <div id="header-mode-badge" class="font-mono-code text-[10px] font-bold opacity-80 truncate">SOLO</div>
+      </div>
+    </button>
+
+    <!-- Indicadores Principais: Baralho e Radar de Saídas Abertas -->
+    <div class="flex items-center gap-1.5 shrink-0">
+      <div class="px-2 py-1 rounded-xl comic-subcard font-mono-code text-[11px] font-extrabold flex items-center gap-1" title="Cartas restantes no baralho">
+        <span>🃏</span>
+        <span id="deck-count-label">44</span>
+      </div>
+
+      <button id="btn-radar-exits" type="button" title="Toque para focar uma saída aberta no mapa"
+        class="px-2.5 py-1 rounded-xl comic-btn bg-rose-600 text-white font-mono-code text-[11px] font-extrabold flex items-center gap-1 radar-pulse">
+        <span>🔓</span>
+        <span id="open-exits-count">4</span>
+      </button>
+    </div>
+
+    <!-- Controles Rápidos: Modos/Sala, Tema, Música, SFX -->
+    <div class="flex items-center gap-1 shrink-0">
+      <button id="btn-open-modes" type="button" title="Modos de Jogo e Sala Online"
+        class="comic-btn px-2 py-1.5 rounded-xl bg-amber-400 text-stone-950 font-extrabold text-xs">
+        🎮
+      </button>
+      <button id="btn-cycle-theme" type="button" title="Mudar Tema Visual"
+        class="comic-btn px-2 py-1.5 rounded-xl bg-amber-200 text-stone-950 font-extrabold text-xs">
+        🎨
+      </button>
+      <button id="btn-toggle-music" type="button" title="Música Faroeste"
+        class="comic-btn px-2 py-1.5 rounded-xl bg-emerald-600 text-white font-extrabold text-xs">
+        🎵
+      </button>
+      <button id="btn-toggle-sfx" type="button" title="Efeitos Sonoros"
+        class="comic-btn px-2 py-1.5 rounded-xl bg-sky-600 text-white font-extrabold text-xs">
+        🔊
+      </button>
+    </div>
+  </header>
+
+  <!-- Faixa de Turno / Status da Operação -->
+  <div id="status-banner" class="z-20 px-3 py-1 flex items-center justify-between gap-2 text-[11px] font-extrabold bg-stone-900 text-amber-100 border-b-2 border-stone-950">
+    <span id="turn-status-text" class="truncate">Arraste uma carta para o tabuleiro ou toque no local válido</span>
+    <div class="flex items-center gap-1.5 shrink-0">
+      <button id="btn-center-board" type="button" class="px-2 py-0.5 rounded bg-stone-700 hover:bg-stone-600 text-amber-200 font-mono-code text-[10px]">
+        🎯 Centralizar
+      </button>
+      <button id="btn-undo-move" type="button" class="px-2 py-0.5 rounded bg-stone-700 hover:bg-stone-600 text-amber-200 font-mono-code text-[10px]">
+        ↩️ Desfazer
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       2. TABULEIRO INFINITO (CANVAS COM PAN, INÉRCIA, PINÇA, GIRO & DRAG)
+       ===================================================================== -->
+  <div id="board-viewport">
+    <canvas id="board-canvas"></canvas>
+
+    <!-- Dica flutuante discreta de gestos no canto superior esquerdo do mapa -->
+    <div class="pointer-events-none absolute top-2.5 left-2.5 z-10 px-2.5 py-1 rounded-xl bg-stone-950/75 text-amber-100 text-[10px] font-semibold backdrop-blur-xs border border-amber-200/20">
+      2× toque: Girar 90° • Pinça/Giro: Zoom &amp; Ângulo • Arraste: Mover Mapa
+    </div>
+
+    <!-- Botão de confirmar encaixe quando uma posição de preview está ativa -->
+    <button id="btn-confirm-placement" type="button"
+      class="hidden absolute bottom-3 left-1/2 -translate-x-1/2 z-20 comic-btn px-5 py-2.5 rounded-2xl bg-emerald-500 text-stone-950 font-comic text-xl tracking-wider">
+      ✓ ENCAIXAR CARTA
+    </button>
+  </div>
+
+  <!-- =====================================================================
+       3. MÃO DO JOGADOR & CONTROLES TÁTEIS DE ROTAÇÃO
+       ===================================================================== -->
+  <section id="player-hand-bar" class="z-20 px-2.5 py-2 comic-panel border-b-0 border-x-0 rounded-none">
+    <div class="flex items-center justify-between gap-2 mb-1.5">
+      <div class="flex items-center gap-1.5">
+        <span class="font-comic text-lg leading-none">SUA MÃO</span>
+        <span id="hand-rotation-badge" class="font-mono-code text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-300 border border-stone-900">
+          0°
+        </span>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <button id="btn-rotate-ccw" type="button" class="comic-btn px-2.5 py-1 rounded-xl bg-amber-200 font-extrabold text-xs">
+          ↺ -90°
+        </button>
+        <button id="btn-rotate-cw" type="button" class="comic-btn px-2.5 py-1 rounded-xl bg-amber-400 font-extrabold text-xs">
+          ↻ +90°
+        </button>
+        <button id="btn-pass-turn" type="button" class="comic-btn px-2.5 py-1 rounded-xl bg-stone-200 font-extrabold text-xs">
+          ⏭️ Trocar
+        </button>
+      </div>
+    </div>
+
+    <div id="hand-cards-container" class="flex items-center justify-center gap-2.5 min-h-[82px]"></div>
+  </section>
+
+  <!-- =====================================================================
+       4. MODAL DE PERFIL LOCAL (ONBOARDING + GALERIA + CÂMERA + AVATARES)
+       ===================================================================== -->
+  <div id="profile-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3.5 bg-black/75 backdrop-blur-xs">
+    <div class="w-full max-w-md rounded-3xl p-4 sm:p-5 comic-panel max-h-[92dvh] overflow-y-auto space-y-4">
+      <div class="flex items-center justify-between border-b-2 border-stone-900 pb-2">
+        <div>
+          <span class="font-mono-code text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-amber-400 border border-stone-900">
+            Registro Local
+          </span>
+          <h2 class="font-comic text-3xl mt-1 leading-none">FICHA DO AGENTE</h2>
+        </div>
+        <button id="btn-close-profile" type="button" class="comic-btn px-2.5 py-1 rounded-xl bg-rose-500 text-white font-extrabold text-xs">
+          ✕
+        </button>
+      </div>
+
+      <!-- Preview + Galeria + Câmera -->
+      <div class="flex flex-col items-center gap-2.5">
+        <div id="profile-avatar-preview" class="w-24 h-24 rounded-full overflow-hidden border-4 border-stone-900 bg-amber-200 flex items-center justify-center shadow-md"></div>
+
+        <div class="flex flex-wrap justify-center gap-2">
+          <label class="comic-btn px-3 py-1.5 rounded-xl bg-amber-200 font-extrabold text-xs cursor-pointer flex items-center gap-1">
+            <span>🖼️</span> Galeria
+            <input id="profile-gallery-input" type="file" accept="image/*" class="hidden" />
+          </label>
+          <button id="btn-open-camera" type="button" class="comic-btn px-3 py-1.5 rounded-xl bg-sky-500 text-white font-extrabold text-xs flex items-center gap-1">
+            <span>📷</span> Câmera
+          </button>
+        </div>
+      </div>
+
+      <!-- Câmera ao vivo com compressão automática para Base64 leve -->
+      <div id="camera-panel" class="hidden p-2.5 rounded-2xl bg-stone-950 text-white border-2 border-stone-900 space-y-2">
+        <video id="camera-video" autoplay playsinline muted class="w-full h-44 object-cover rounded-xl bg-stone-900"></video>
+        <div class="flex gap-2">
+          <button id="btn-capture-camera" type="button" class="flex-1 comic-btn py-2 rounded-xl bg-emerald-500 text-stone-950 font-extrabold text-xs">
+            📸 Tirar Foto
+          </button>
+          <button id="btn-flip-camera" type="button" class="comic-btn px-3 py-2 rounded-xl bg-amber-300 text-stone-950 font-extrabold text-xs">
+            🔄
+          </button>
+          <button id="btn-cancel-camera" type="button" class="comic-btn px-3 py-2 rounded-xl bg-rose-600 text-white font-extrabold text-xs">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Ícones predefinidos -->
+      <div>
+        <label class="block text-xs font-extrabold uppercase mb-1.5">Ou escolha um ícone:</label>
+        <div id="preset-avatars-grid" class="grid grid-cols-6 gap-2"></div>
+      </div>
+
+      <!-- Nome do Agente -->
+      <div>
+        <label for="profile-name-input" class="block text-xs font-extrabold uppercase mb-1">Nome / Apelido</label>
+        <input id="profile-name-input" type="text" maxlength="18" placeholder="Ex: Capitão Ferro"
+          class="w-full px-3.5 py-2.5 rounded-xl comic-subcard font-extrabold text-sm focus:outline-none" />
+      </div>
+
+      <button id="btn-save-profile" type="button" class="w-full comic-btn py-3 rounded-2xl bg-emerald-500 text-stone-950 font-comic text-2xl tracking-wider">
+        ENTRAR NA OPERAÇÃO →
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       5. MODAL DE MODOS DE JOGO, TEMAS E SALA ONLINE P2P (4 LETRAS)
+       ===================================================================== -->
+  <div id="modes-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-3.5 bg-black/75 backdrop-blur-xs">
+    <div class="w-full max-w-lg rounded-3xl p-4 sm:p-5 comic-panel max-h-[92dvh] overflow-y-auto space-y-4">
+      <div class="flex items-center justify-between border-b-2 border-stone-900 pb-2">
+        <div>
+          <span class="font-mono-code text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-rose-600 text-white border border-stone-900">
+            Central Tática
+          </span>
+          <h2 class="font-comic text-3xl mt-1 leading-none">MODOS &amp; SALAS</h2>
+        </div>
+        <button id="btn-close-modes" type="button" class="comic-btn px-2.5 py-1 rounded-xl bg-rose-500 text-white font-extrabold text-xs">
+          ✕
+        </button>
+      </div>
+
+      <!-- Seleção de Modo -->
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" data-mode="solo" class="mode-select-btn comic-btn p-2.5 rounded-2xl bg-amber-300 text-left">
+          <div class="font-extrabold text-xs">🤠 Solo Clássico</div>
+          <div class="text-[10px] opacity-80">Feche todas as saídas sozinho</div>
+        </button>
+        <button type="button" data-mode="bot" class="mode-select-btn comic-btn p-2.5 rounded-2xl bg-amber-100 text-left">
+          <div class="font-extrabold text-xs">🤖 Dupla com Bot IA</div>
+          <div class="text-[10px] opacity-80">Parceiro calcula bloqueios diretos</div>
+        </button>
+        <button type="button" data-mode="family" class="mode-select-btn comic-btn p-2.5 rounded-2xl bg-amber-100 text-left">
+          <div class="font-extrabold text-xs">👨‍👩‍👧‍👦 Família Passa-e-Joga</div>
+          <div class="text-[10px] opacity-80">2 a 4 jogadores no mesmo aparelho</div>
+        </button>
+        <button type="button" data-mode="p2p" class="mode-select-btn comic-btn p-2.5 rounded-2xl bg-amber-100 text-left">
+          <div class="font-extrabold text-xs">📡 Sala Online P2P</div>
+          <div class="text-[10px] opacity-80">Código de 4 letras + link direto</div>
+        </button>
+      </div>
+
+      <!-- Configuração Família (2-4 jogadores) -->
+      <div id="family-config-box" class="hidden p-3 rounded-2xl comic-subcard space-y-2">
+        <div class="flex items-center justify-between text-xs font-extrabold">
+          <span>Jogadores na mesa local:</span>
+          <div class="flex gap-1.5">
+            <button type="button" data-fam-count="2" class="fam-cnt-btn comic-btn px-2.5 py-1 rounded-lg bg-amber-400 text-xs">2P</button>
+            <button type="button" data-fam-count="3" class="fam-cnt-btn comic-btn px-2.5 py-1 rounded-lg bg-amber-100 text-xs">3P</button>
+            <button type="button" data-fam-count="4" class="fam-cnt-btn comic-btn px-2.5 py-1 rounded-lg bg-amber-100 text-xs">4P</button>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 text-xs font-bold cursor-pointer">
+          <input id="family-privacy-screen" type="checkbox" checked class="w-4 h-4 accent-amber-700" />
+          <span>Tela de transição entre turnos (esconder mão)</span>
+        </label>
+      </div>
+
+      <!-- Configuração Sala Online P2P (Código de 4 letras) -->
+      <div id="p2p-config-box" class="hidden p-3 rounded-2xl comic-subcard space-y-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-extrabold">Sala P2P (4 letras):</span>
+          <span id="p2p-connection-status" class="font-mono-code text-[10px] font-extrabold px-2 py-0.5 rounded bg-stone-800 text-amber-200">
+            DESCONECTADO
+          </span>
+        </div>
+
+        <div class="flex gap-2">
+          <button id="btn-create-p2p-room" type="button" class="flex-1 comic-btn py-2 rounded-xl bg-emerald-500 text-stone-950 font-extrabold text-xs">
+            ✨ Criar Sala
+          </button>
+          <input id="p2p-join-code" type="text" maxlength="4" placeholder="ABCD"
+            class="w-24 px-2.5 py-2 rounded-xl border-2 border-stone-900 bg-white font-mono-code font-extrabold text-center uppercase text-sm" />
+          <button id="btn-join-p2p-room" type="button" class="comic-btn px-3 py-2 rounded-xl bg-sky-500 text-white font-extrabold text-xs">
+            Entrar
+          </button>
+        </div>
+
+        <div id="p2p-room-share-row" class="hidden flex items-center justify-between gap-2 p-2 rounded-xl bg-amber-200 border border-stone-900">
+          <div class="font-mono-code text-xs font-extrabold">
+            CÓDIGO: <span id="p2p-active-code" class="text-rose-700">----</span>
+          </div>
+          <button id="btn-copy-p2p-link" type="button" class="comic-btn px-2.5 py-1 rounded-lg bg-stone-900 text-amber-200 font-bold text-[10px]">
+            🔗 Copiar Link
+          </button>
+        </div>
+      </div>
+
+      <!-- Seletor dos 4 Temas Visuais -->
+      <div>
+        <div class="text-xs font-extrabold uppercase mb-1.5">Tema Visual do Tabuleiro</div>
+        <div id="theme-buttons-grid" class="grid grid-cols-2 gap-2"></div>
+      </div>
+
+      <button id="btn-start-new-match" type="button" class="w-full comic-btn py-3 rounded-2xl bg-rose-600 text-white font-comic text-2xl tracking-wider">
+        🔄 INICIAR NOVA PARTIDA
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       6. TELA DE TRANSIÇÃO PASSA-E-JOGA (MODO FAMÍLIA) & FIM DE PARTIDA
+       ===================================================================== -->
+  <div id="pass-turn-overlay" class="fixed inset-0 z-40 hidden flex items-center justify-center p-4 bg-stone-950/90 backdrop-blur-xs">
+    <div class="w-full max-w-sm rounded-3xl p-5 comic-panel text-center space-y-4">
+      <div class="font-mono-code text-xs font-extrabold uppercase text-amber-800">Passa-e-Joga Local</div>
+      <h3 id="pass-turn-player-title" class="font-comic text-4xl leading-none">VEZ DO JOGADOR 2</h3>
+      <p class="text-xs font-semibold opacity-80">Passe o aparelho e toque abaixo para revelar sua mão de cartas.</p>
+      <button id="btn-reveal-turn-hand" type="button" class="w-full comic-btn py-3 rounded-2xl bg-emerald-500 text-stone-950 font-comic text-2xl">
+        REVELAR MINHA MÃO
+      </button>
+    </div>
+  </div>
+
+  <div id="gameover-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+    <div class="w-full max-w-md rounded-3xl p-5 comic-panel text-center space-y-4">
+      <div id="gameover-badge" class="inline-block font-comic text-4xl px-4 py-1 rounded-2xl bg-emerald-400 border-2 border-stone-900">
+        FUGITIVO CONTIDO!
+      </div>
+      <p id="gameover-summary" class="text-sm font-bold leading-relaxed"></p>
+      <div class="grid grid-cols-2 gap-2 font-mono-code text-xs font-extrabold">
+        <div class="p-2.5 rounded-xl comic-subcard">Saídas Restantes: <span id="go-open-exits">0</span></div>
+        <div class="p-2.5 rounded-xl comic-subcard">Cartas Usadas: <span id="go-cards-used">0</span></div>
+      </div>
+      <button id="btn-play-again" type="button" class="w-full comic-btn py-3 rounded-2xl bg-rose-600 text-white font-comic text-2xl tracking-wider">
+        JOGAR NOVAMENTE
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast de Notificação -->
+  <div id="toast-banner" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 hidden max-w-sm w-[92%] px-3.5 py-2 rounded-2xl comic-panel text-xs font-extrabold text-center"></div>
+
+  <!-- =====================================================================
+       7. MOTOR DO JOGO, CARTAS ILUSTRADAS, BOT IA, P2P, GESTOS & ÁUDIO
+       ===================================================================== -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* -------------------------------------------------------------------
+         1. ARMAZENAMENTO SEGURO COM FALLBACK EM MEMÓRIA
+         ------------------------------------------------------------------- */
+      const SafeStore = (() => {
+        const memory = {};
+        return {
+          get(key) {
+            try { return window.localStorage.getItem(key); }
+            catch (_) { return Object.prototype.hasOwnProperty.call(memory, key) ? memory[key] : null; }
+          },
+          set(key, val) {
+            const s = String(val);
+            memory[key] = s;
+            try { window.localStorage.setItem(key, s); }
+            catch (_) { /* Fallback silencioso em memória */ }
+          }
+        };
+      })();
+
+      function showToast(msg, ms = 2600) {
+        try {
+          const el = document.getElementById('toast-banner');
+          if (!el) return;
+          el.textContent = msg;
+          el.classList.remove('hidden');
+          clearTimeout(showToast._t);
+          showToast._t = setTimeout(() => el.classList.add('hidden'), ms);
+        } catch (_) {}
+      }
+
+      /* -------------------------------------------------------------------
+         2. MANIFESTO PWA PARA GITHUB PAGES & SIMULADOR
+         ------------------------------------------------------------------- */
+      function initPwaManifest() {
+        try {
+          const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+            <rect width="128" height="128" rx="26" fill="#291D16"/>
+            <rect x="14" y="14" width="100" height="100" rx="18" fill="#FDE68A" stroke="#1C1917" stroke-width="8"/>
+            <path d="M36 22 V106 M64 22 V106 M92 22 V106" stroke="#1C1917" stroke-width="7"/>
+            <circle cx="64" cy="68" r="16" fill="#DC2626"/>
+          </svg>`;
+          const manifest = {
+            name: 'Fuga da Cela: Operação Contenção',
+            short_name: 'Fuga da Cela',
+            start_url: './',
+            display: 'standalone',
+            background_color: '#5C3A21',
+            theme_color: '#DC2626',
+            icons: [{
+              src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgIcon),
+              sizes: '128x128',
+              type: 'image/svg+xml'
+            }]
+          };
+          const link = document.getElementById('pwa-manifest-link');
+          if (link) {
+            link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/json' }));
+          }
+        } catch (_) {}
+      }
+
+      /* -------------------------------------------------------------------
+         3. MOTOR DE ÁUDIO PROCEDURAL (FAROESTE/HQ + MÚSICA E SFX SEPARADOS)
+         ------------------------------------------------------------------- */
+      class WesternAudioEngine {
+        constructor() {
+          this.ctx = null;
+          this.musicEnabled = true;
+          this.sfxEnabled = true;
+          this.loopTimer = null;
+          this.step = 0;
+        }
+
+        ensureContext() {
+          try {
+            if (!this.ctx) {
+              const AudioCtx = window.AudioContext || window.webkitAudioContext;
+              if (AudioCtx) this.ctx = new AudioCtx();
+            }
+            if (this.ctx && this.ctx.state === 'suspended') {
+              this.ctx.resume().catch(() => {});
+            }
+          } catch (_) {}
+          return !!this.ctx;
+        }
+
+        startMusicLoop() {
+          this.stopMusicLoop();
+          if (!this.musicEnabled) return;
+          // Sequência rítmica de faroeste cômico em 120 BPM (colcheias = 250ms)
+          const bassNotes = [110, 0, 146.83, 0, 164.81, 0, 146.83, 130.81];
+          const leadNotes = [440, 523.25, 587.33, 659.25, 587.33, 440, 392.00, 440];
+
+          this.loopTimer = setInterval(() => {
+            if (!this.musicEnabled || !this.ctx || this.ctx.state !== 'running') return;
+            try {
+              const now = this.ctx.currentTime;
+              const idx = this.step % bassNotes.length;
+
+              // Baixo "boom" / acordeão "chick"
+              const bFreq = bassNotes[idx];
+              if (bFreq > 0) {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(bFreq, now);
+                gain.gain.setValueAtTime(0.045, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.19);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+              } else {
+                // Contratempo percussivo leve
+                const cOsc = this.ctx.createOscillator();
+                const cGain = this.ctx.createGain();
+                cOsc.type = 'square';
+                cOsc.frequency.setValueAtTime(220, now);
+                cGain.gain.setValueAtTime(0.015, now);
+                cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+                cOsc.connect(cGain);
+                cGain.connect(this.ctx.destination);
+                cOsc.start(now);
+                cOsc.stop(now + 0.065);
+              }
+
+              // Melodia assoviada suave a cada 2 passos
+              if (this.step % 2 === 0) {
+                const lFreq = leadNotes[(this.step >> 1) % leadNotes.length];
+                const lOsc = this.ctx.createOscillator();
+                const lGain = this.ctx.createGain();
+                lOsc.type = 'sine';
+                lOsc.frequency.setValueAtTime(lFreq, now);
+                lGain.gain.setValueAtTime(0.025, now);
+                lGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+                lOsc.connect(lGain);
+                lGain.connect(this.ctx.destination);
+                lOsc.start(now);
+                lOsc.stop(now + 0.23);
+              }
+              this.step++;
+            } catch (_) {}
+          }, 250);
+        }
+
+        stopMusicLoop() {
+          if (this.loopTimer) {
+            clearInterval(this.loopTimer);
+            this.loopTimer = null;
+          }
+        }
+
+        setMusic(enabled) {
+          this.musicEnabled = !!enabled;
+          if (this.musicEnabled) {
+            this.ensureContext();
+            this.startMusicLoop();
+          } else {
+            this.stopMusicLoop();
+          }
+        }
+
+        setSfx(enabled) {
+          this.sfxEnabled = !!enabled;
+        }
+
+        playSfx(kind) {
+          if (!this.sfxEnabled || !this.ensureContext()) return;
+          try {
+            const now = this.ctx.currentTime;
+            if (kind === 'rotate') {
+              const o = this.ctx.createOscillator();
+              const g = this.ctx.createGain();
+              o.type = 'triangle';
+              o.frequency.setValueAtTime(320, now);
+              o.frequency.exponentialRampToValueAtTime(520, now + 0.07);
+              g.gain.setValueAtTime(0.09, now);
+              g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+              o.connect(g); g.connect(this.ctx.destination);
+              o.start(now); o.stop(now + 0.085);
+            } else if (kind === 'place') {
+              const o = this.ctx.createOscillator();
+              const g = this.ctx.createGain();
+              o.type = 'sine';
+              o.frequency.setValueAtTime(210, now);
+              o.frequency.exponentialRampToValueAtTime(75, now + 0.12);
+              g.gain.setValueAtTime(0.18, now);
+              g.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+              o.connect(g); g.connect(this.ctx.destination);
+              o.start(now); o.stop(now + 0.14);
+            } else if (kind === 'lock') {
+              [523.25, 783.99].forEach((freq, i) => {
+                const o = this.ctx.createOscillator();
+                const g = this.ctx.createGain();
+                o.type = 'square';
+                o.frequency.setValueAtTime(freq, now + i * 0.06);
+                g.gain.setValueAtTime(0.07, now + i * 0.06);
+                g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.14);
+                o.connect(g); g.connect(this.ctx.destination);
+                o.start(now + i * 0.06); o.stop(now + i * 0.06 + 0.15);
+              });
+            } else if (kind === 'win') {
+              [392, 493.88, 587.33, 783.99].forEach((freq, i) => {
+                const o = this.ctx.createOscillator();
+                const g = this.ctx.createGain();
+                o.type = 'triangle';
+                o.frequency.setValueAtTime(freq, now + i * 0.1);
+                g.gain.setValueAtTime(0.12, now + i * 0.1);
+                g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.35);
+                o.connect(g); g.connect(this.ctx.destination);
+                o.start(now + i * 0.1); o.stop(now + i * 0.1 + 0.36);
+              });
+            } else if (kind === 'lose') {
+              [330, 293.66, 261.63, 196].forEach((freq, i) => {
+                const o = this.ctx.createOscillator();
+                const g = this.ctx.createGain();
+                o.type = 'sawtooth';
+                o.frequency.setValueAtTime(freq, now + i * 0.13);
+                g.gain.setValueAtTime(0.08, now + i * 0.13);
+                g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.13 + 0.25);
+                o.connect(g); g.connect(this.ctx.destination);
+                o.start(now + i * 0.13); o.stop(now + i * 0.13 + 0.26);
+              });
+            }
+          } catch (_) {}
+        }
+      }
+
+      const audio = new WesternAudioEngine();
+
+      /* -------------------------------------------------------------------
+         4. TEMAS VISUAIS & ÍCONES DE PERFIL
+         ------------------------------------------------------------------- */
+      const THEMES = {
+        classic: {
+          label: '🪵 Clássico Mesa',
+          vars: {
+            '--table-bg': '#5C3A21',
+            '--table-grad': '#855632',
+            '--panel-bg': '#FFFBEB',
+            '--panel-card': '#FEF3C7',
+            '--panel-border': '#1C1917',
+            '--ink-primary': '#1C1917',
+            '--ink-secondary': '#57534E',
+            '--soil-dark': '#291D16',
+            '--soil-mid': '#422D20',
+            '--tunnel-sand': '#FDE68A',
+            '--tunnel-glow': '#F59E0B',
+            '--beam-wood': '#B45309',
+            '--brick-red': '#B91C1C'
+          }
+        },
+        westernNight: {
+          label: '🤠 Faroeste Noturno',
+          vars: {
+            '--table-bg': '#171421',
+            '--table-grad': '#2B233D',
+            '--panel-bg': '#241F33',
+            '--panel-card': '#322B47',
+            '--panel-border': '#09080E',
+            '--ink-primary': '#FEF3C7',
+            '--ink-secondary': '#C4B5FD',
+            '--soil-dark': '#14111E',
+            '--soil-mid': '#231D33',
+            '--tunnel-sand': '#FBBF24',
+            '--tunnel-glow': '#EA580C',
+            '--beam-wood': '#92400E',
+            '--brick-red': '#991B1B'
+          }
+        },
+        goldMine: {
+          label: '⛏️ Mina de Ouro',
+          vars: {
+            '--table-bg': '#3B2814',
+            '--table-grad': '#634321',
+            '--panel-bg': '#FEF9C3',
+            '--panel-card': '#FDE047',
+            '--panel-border': '#1C1917',
+            '--ink-primary': '#1C1917',
+            '--ink-secondary': '#451A03',
+            '--soil-dark': '#26190C',
+            '--soil-mid': '#3E2914',
+            '--tunnel-sand': '#FEF08A',
+            '--tunnel-glow': '#EAB308',
+            '--beam-wood': '#D97706',
+            '--brick-red': '#9A3412'
+          }
+        },
+        blueprint: {
+          label: '📐 Prancheta',
+          vars: {
+            '--table-bg': '#0F2942',
+            '--table-grad': '#1D466E',
+            '--panel-bg': '#F0F9FF',
+            '--panel-card': '#E0F2FE',
+            '--panel-border': '#082F49',
+            '--ink-primary': '#082F49',
+            '--ink-secondary': '#0369A1',
+            '--soil-dark': '#0C2338',
+            '--soil-mid': '#163A5A',
+            '--tunnel-sand': '#BAE6FD',
+            '--tunnel-glow': '#38BDF8',
+            '--beam-wood': '#0284C7',
+            '--brick-red': '#E11D48'
+          }
+        }
+      };
+
+      const PRESET_AVATARS = [
+        { id: 'bandit', svg: `<svg viewBox="0 0 64 64" class="w-8 h-8"><rect x="14" y="18" width="36" height="32" rx="12" fill="#FDE68A" stroke="#1C1917" stroke-width="3.5"/><rect x="15" y="28" width="34" height="8" fill="#1C1917"/><circle cx="25" cy="32" r="2.5" fill="#FFF"/><circle cx="39" cy="32" r="2.5" fill="#FFF"/><path d="M12 18 H52 M22 10 H42" stroke="#1C1917" stroke-width="4" stroke-linecap="round"/></svg>` },
+        { id: 'sheriff', svg: `<svg viewBox="0 0 64 64" class="w-8 h-8"><polygon points="32,10 38,24 54,26 42,36 45,52 32,44 19,52 22,36 10,26 26,24" fill="#FACC15" stroke="#1C1917" stroke-width="3.5"/></svg>` },
+        { id: 'dynamite', svg: `<svg viewBox="0 0 64 64" class="w-8 h-8"><rect x="24" y="18" width="16" height="34" rx="4" fill="#DC2626" stroke="#1C1917" stroke-width="3.5"/><path d="M32 18 Q36 8 44 10" fill="none" stroke="#1C1917" stroke-width="3.5" stroke-linecap="round"/><circle cx="45" cy="10" r="4" fill="#FACC15"/></svg>` },
+        { id: 'pickaxe', svg: `<svg viewBox="0 0 64 64" class="w-8 h-8"><path d="M14 22 Q32 12 50 22" fill="none" stroke="#94A3B8" stroke-width="6" stroke-linecap="round"/><line x1="32" y1="18" x2="18" y2="50" stroke="#B45309" stroke-width="6" stroke-linecap="round"/></svg>` },
+        { id: 'lantern', svg: `<svg viewBox="0 0 64 64" class="w-8 h-8"><rect x="20" y="22" width="24" height="28" rx="6" fill="#FDE68A" stroke="#1C1917" stroke-width="3.5"/><circle cx="32" cy="36" r="7" fill="#F59E0B"/><path d="M26 22 V14 H38 V22" fill="none" stroke="#1C1917" stroke-width="3.5"/></svg>` },
+        { id: 'lock', svg: `<svg viewBox="0 0 64 64" class="w-8 h-8"><rect x="16" y="30" width="32" height="24" rx="5" fill="#F59E0B" stroke="#1C1917" stroke-width="3.5"/><path d="M22 30 V22 A10 10 0 0 1 42 22 V30" fill="none" stroke="#1C1917" stroke-width="4.5"/></svg>` }
+      ];
+
+      /* -------------------------------------------------------------------
+         5. MODELO GEOMÉTRICO DE CÉLULAS, CONEXÕES & CARTA DUPLA (2x1)
+         ------------------------------------------------------------------- */
+      // Direções: 0 = Norte (Cima), 1 = Leste (Direita), 2 = Sul (Baixo), 3 = Oeste (Esquerda)
+      const DIRS = [
+        { dx: 0, dy: -1, opp: 2 },
+        { dx: 1, dy: 0, opp: 3 },
+        { dx: 0, dy: 1, opp: 0 },
+        { dx: -1, dy: 0, opp: 1 }
+      ];
+
+      // Cada célula tem edges: [N, E, S, W] onde:
+      // 'tunnel' = túnel aberto na borda, 'wall' = parede de terra/rocha, 'end' = beco sem saída com muro de tijolos
+      const CELL_TEMPLATES = {
+        straightNS: { edges: ['tunnel', 'wall', 'tunnel', 'wall'], kind: 'straightNS' },
+        straightEW: { edges: ['wall', 'tunnel', 'wall', 'tunnel'], kind: 'straightEW' },
+        curveNE:    { edges: ['tunnel', 'tunnel', 'wall', 'wall'], kind: 'curveNE' },
+        curveES:    { edges: ['wall', 'tunnel', 'tunnel', 'wall'], kind: 'curveES' },
+        curveSW:    { edges: ['wall', 'wall', 'tunnel', 'tunnel'], kind: 'curveSW' },
+        curveWN:    { edges: ['tunnel', 'wall', 'wall', 'tunnel'], kind: 'curveWN' },
+        teeNES:     { edges: ['tunnel', 'tunnel', 'tunnel', 'wall'], kind: 'teeNES' },
+        teeESW:     { edges: ['wall', 'tunnel', 'tunnel', 'tunnel'], kind: 'teeESW' },
+        teeSWN:     { edges: ['tunnel', 'wall', 'tunnel', 'tunnel'], kind: 'teeSWN' },
+        teeWNE:     { edges: ['tunnel', 'tunnel', 'wall', 'tunnel'], kind: 'teeWNE' },
+        cross:      { edges: ['tunnel', 'tunnel', 'tunnel', 'tunnel'], kind: 'cross' },
+        deadN:      { edges: ['end', 'wall', 'wall', 'wall'], kind: 'deadN' },
+        deadE:      { edges: ['wall', 'end', 'wall', 'wall'], kind: 'deadE' },
+        deadS:      { edges: ['wall', 'wall', 'end', 'wall'], kind: 'deadS' },
+        deadW:      { edges: ['wall', 'wall', 'wall', 'end'], kind: 'deadW' },
+        wallOnly:   { edges: ['wall', 'wall', 'wall', 'wall'], kind: 'wallOnly' }
+      };
+
+      function rotateEdges(edges, rotSteps) {
+        const k = ((rotSteps % 4) + 4) % 4;
+        const res = new Array(4);
+        for (let d = 0; d < 4; d++) {
+          res[(d + k) % 4] = edges[d];
+        }
+        return res;
+      }
+
+      // Cartas duplas (2 células lado a lado: esquerda (0,0) e direita (1,0) no espaço local)
+      const CARD_BLUEPRINTS = [
+        { name: 'Duplo Bloqueio', c0: CELL_TEMPLATES.deadW, c1: CELL_TEMPLATES.deadE },
+        { name: 'Trilho & Muro', c0: CELL_TEMPLATES.straightEW, c1: CELL_TEMPLATES.deadE },
+        { name: 'Curva & Tranca', c0: CELL_TEMPLATES.curveES, c1: CELL_TEMPLATES.deadE },
+        { name: 'Bifurcação T', c0: CELL_TEMPLATES.teeESW, c1: CELL_TEMPLATES.deadE },
+        { name: 'Desvio Sul', c0: CELL_TEMPLATES.curveSW, c1: CELL_TEMPLATES.curveES },
+        { name: 'Galeria Dupla', c0: CELL_TEMPLATES.straightEW, c1: CELL_TEMPLATES.straightEW },
+        { name: 'Entroncamento', c0: CELL_TEMPLATES.teeWNE, c1: CELL_TEMPLATES.curveSW },
+        { name: 'Passagem Cruzada', c0: CELL_TEMPLATES.cross, c1: CELL_TEMPLATES.deadE },
+        { name: 'Beco Norte/Sul', c0: CELL_TEMPLATES.deadN, c1: CELL_TEMPLATES.deadS },
+        { name: 'Curva & Retorno', c0: CELL_TEMPLATES.curveWN, c1: CELL_TEMPLATES.curveES },
+        { name: 'Escoramento T', c0: CELL_TEMPLATES.teeNES, c1: CELL_TEMPLATES.deadS },
+        { name: 'Ponte de Pedra', c0: CELL_TEMPLATES.straightNS, c1: CELL_TEMPLATES.teeESW }
+      ];
+
+      function getCardFootprintCells(card, gx, gy, rot) {
+        const r = ((rot % 4) + 4) % 4;
+        // Posição relativa da segunda célula conforme rotação:
+        // 0: (1,0) direita | 1: (0,1) baixo | 2: (-1,0) esquerda | 3: (0,-1) cima
+        const offsets = [
+          { dx: 1, dy: 0 },
+          { dx: 0, dy: 1 },
+          { dx: -1, dy: 0 },
+          { dx: 0, dy: -1 }
+        ];
+        const off = offsets[r];
+        return [
+          { gx, gy, edges: rotateEdges(card.c0.edges, r), kind: card.c0.kind, isCellCell: false },
+          { gx: gx + off.dx, gy: gy + off.dy, edges: rotateEdges(card.c1.edges, r), kind: card.c1.kind, isCellCell: false }
+        ];
+      }
+
+      /* -------------------------------------------------------------------
+         6. ESTADO DO JOGO & PERSISTÊNCIA
+         ------------------------------------------------------------------- */
+      const STORAGE_PROFILE = 'fuga_cela_profile_v1';
+      const STORAGE_PREFS = 'fuga_cela_prefs_v1';
+
+      const game = {
+        profile: {
+          name: 'Capitão Ferro',
+          avatar: PRESET_AVATARS[0].svg
+        },
+        prefs: {
+          theme: 'classic',
+          music: true,
+          sfx: true
+        },
+        mode: 'solo', // 'solo' | 'bot' | 'family' | 'p2p'
+        familyCount: 2,
+        familyPrivacy: true,
+        p2p: {
+          peer: null,
+          conn: null,
+          roomCode: '',
+          isHost: false
+        },
+        board: new Map(), // "gx,gy" -> { gx, gy, edges, kind, isCellCell, lockedByCard }
+        deck: [],
+        hands: [[]], // array de mãos por jogador
+        currentPlayer: 0,
+        playerCount: 1,
+        selectedHandIdx: 0,
+        rotation: 0, // 0, 1, 2, 3 (x90°)
+        previewPlacement: null, // { gx, gy, rot, valid }
+        history: [],
+        particles: [],
+        cardsUsed: 0,
+        gameOver: false,
+        // Câmera do tabuleiro infinito
+        cam: {
+          x: 0,
+          y: 0,
+          zoom: 1,
+          minZoom: 0.45,
+          maxZoom: 2.3,
+          vx: 0,
+          vy: 0
+        }
+      };
+
+      function cellKey(gx, gy) {
+        return `${gx},${gy}`;
+      }
+
+      function buildInitialBoard() {
+        game.board.clear();
+        // Carta central "CELA Nº 13" ocupando (0,0) e (1,0) com 4 túneis iniciais abertos (N, E, S, W)
+        game.board.set(cellKey(0, 0), {
+          gx: 0, gy: 0,
+          edges: ['tunnel', 'tunnel', 'tunnel', 'wall'],
+          kind: 'cellLeft',
+          isCellCell: true,
+          cardId: 'CELL_13'
+        });
+        game.board.set(cellKey(1, 0), {
+          gx: 1, gy: 0,
+          edges: ['tunnel', 'tunnel', 'tunnel', 'tunnel'],
+          kind: 'cellRight',
+          isCellCell: true,
+          cardId: 'CELL_13'
+        });
+      }
+
+      function buildDeck() {
+        const deck = [];
+        let uid = 1;
+        // 44 cartas duplas variadas
+        for (let copy = 0; copy < 4; copy++) {
+          CARD_BLUEPRINTS.forEach((bp, idx) => {
+            if (deck.length < 44) {
+              deck.push({
+                id: `card_${uid++}_${idx}`,
+                name: bp.name,
+                c0: bp.c0,
+                c1: bp.c1
+              });
+            }
+          });
+        }
+        // Embaralhar Fisher-Yates
+        for (let i = deck.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const tmp = deck[i]; deck[i] = deck[j]; deck[j] = tmp;
+        }
+        return deck;
+      }
+
+      function startNewMatch(fromP2pSync = false) {
+        try {
+          buildInitialBoard();
+          game.deck = buildDeck();
+          game.history = [];
+          game.particles = [];
+          game.cardsUsed = 0;
+          game.gameOver = false;
+          game.currentPlayer = 0;
+          game.selectedHandIdx = 0;
+          game.rotation = 0;
+          game.previewPlacement = null;
+
+          if (game.mode === 'family') {
+            game.playerCount = game.familyCount;
+          } else if (game.mode === 'bot' || game.mode === 'p2p') {
+            game.playerCount = 2;
+          } else {
+            game.playerCount = 1;
+          }
+
+          game.hands = Array.from({ length: game.playerCount }, () => []);
+          for (let h = 0; h < 3; h++) {
+            for (let p = 0; p < game.playerCount; p++) {
+              if (game.deck.length > 0) {
+                game.hands[p].push(game.deck.pop());
+              }
+            }
+          }
+
+          document.getElementById('gameover-modal').classList.add('hidden');
+          document.getElementById('btn-confirm-placement').classList.add('hidden');
+          centerCameraOnCell(0.5, 0);
+          updateHud();
+          renderHand();
+
+          if (!fromP2pSync && game.mode === 'p2p' && game.p2p.conn && game.p2p.conn.open) {
+            sendP2pSnapshot();
+          }
+        } catch (err) {
+          console.error('Erro ao iniciar partida:', err);
+        }
+      }
+
+      /* -------------------------------------------------------------------
+         7. VALIDAÇÃO DE ENCAIXE & CONTAGEM DE SAÍDAS ABERTAS
+         ------------------------------------------------------------------- */
+      function getOpenExitsList() {
+        const exits = [];
+        game.board.forEach(cell => {
+          cell.edges.forEach((edge, dirIdx) => {
+            if (edge === 'tunnel') {
+              const nx = cell.gx + DIRS[dirIdx].dx;
+              const ny = cell.gy + DIRS[dirIdx].dy;
+              const neighbor = game.board.get(cellKey(nx, ny));
+              if (!neighbor) {
+                exits.push({
+                  gx: cell.gx,
+                  gy: cell.gy,
+                  dir: dirIdx,
+                  targetGx: nx,
+                  targetGy: ny
+                });
+              }
+            }
+          });
+        });
+        return exits;
+      }
+
+      function isPlacementValid(card, gx, gy, rot) {
+        const cells = getCardFootprintCells(card, gx, gy, rot);
+        const footprintSet = new Set(cells.map(c => cellKey(c.gx, c.gy)));
+
+        let touchesExistingTunnel = false;
+
+        for (const c of cells) {
+          // Não pode sobrepor célula já ocupada
+          if (game.board.has(cellKey(c.gx, c.gy))) {
+            return false;
+          }
+
+          // Verifica as 4 bordas da célula
+          for (let d = 0; d < 4; d++) {
+            const nx = c.gx + DIRS[d].dx;
+            const ny = c.gy + DIRS[d].dy;
+            const nKey = cellKey(nx, ny);
+
+            // Se o vizinho faz parte da própria carta 2x1
+            if (footprintSet.has(nKey)) {
+              const sibling = cells.find(sc => cellKey(sc.gx, sc.gy) === nKey);
+              const oppEdge = sibling.edges[DIRS[d].opp];
+              if (c.edges[d] !== oppEdge) return false;
+              continue;
+            }
+
+            const existingNeighbor = game.board.get(nKey);
+            if (existingNeighbor) {
+              const neighborEdge = existingNeighbor.edges[DIRS[d].opp];
+              const myEdge = c.edges[d];
+
+              // Túnel só conecta com túnel; parede/beco não conecta com túnel
+              const myOpen = myEdge === 'tunnel';
+              const nOpen = neighborEdge === 'tunnel';
+              if (myOpen !== nOpen) {
+                return false;
+              }
+              if (myOpen && nOpen) {
+                touchesExistingTunnel = true;
+              }
+            }
+          }
+        }
+
+        return touchesExistingTunnel;
+      }
+
+      function findAllValidPlacements(card) {
+        const list = [];
+        const exits = getOpenExitsList();
+        const candidateCoords = new Set();
+
+        exits.forEach(ex => {
+          candidateCoords.add(cellKey(ex.targetGx, ex.targetGy));
+          candidateCoords.add(cellKey(ex.targetGx - 1, ex.targetGy));
+          candidateCoords.add(cellKey(ex.targetGx, ex.targetGy - 1));
+          candidateCoords.add(cellKey(ex.targetGx + 1, ex.targetGy));
+          candidateCoords.add(cellKey(ex.targetGx, ex.targetGy + 1));
+        });
+
+        candidateCoords.forEach(key => {
+          const [cx, cy] = key.split(',').map(Number);
+          for (let rot = 0; rot < 4; rot++) {
+            if (isPlacementValid(card, cx, cy, rot)) {
+              list.push({ gx: cx, gy: cy, rot });
+            }
+          }
+        });
+
+        return list;
+      }
+
+      function spawnLockParticles(gx, gy) {
+        const px = (gx + 0.5) * 92;
+        const py = (gy + 0.5) * 92;
+        const colors = ['#FACC15', '#F97316', '#34D399', '#FDE68A'];
+        for (let i = 0; i < 14; i++) {
+          const angle = (Math.PI * 2 * i) / 14 + Math.random() * 0.3;
+          const speed = 1.5 + Math.random() * 3.2;
+          game.particles.push({
+            x: px,
+            y: py,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1,
+            color: colors[i % colors.length],
+            size: 4 + Math.random() * 4
+          });
+        }
+      }
+
+      function commitPlacement(playerIdx, handIdx, gx, gy, rot) {
+        const hand = game.hands[playerIdx];
+        if (!hand || !hand[handIdx]) return false;
+        const card = hand[handIdx];
+        if (!isPlacementValid(card, gx, gy, rot)) return false;
+
+        // Salva snapshot para desfazer
+        game.history.push({
+          boardEntries: Array.from(game.board.entries()),
+          deck: game.deck.map(c => ({ ...c })),
+          hands: game.hands.map(h => h.map(c => ({ ...c }))),
+          currentPlayer: game.currentPlayer,
+          cardsUsed: game.cardsUsed
+        });
+
+        const beforeExits = getOpenExitsList().length;
+        const cells = getCardFootprintCells(card, gx, gy, rot);
+
+        cells.forEach(c => {
+          game.board.set(cellKey(c.gx, c.gy), {
+            gx: c.gx,
+            gy: c.gy,
+            edges: c.edges.slice(),
+            kind: c.kind,
+            isCellCell: false,
+            cardId: card.id
+          });
+        });
+
+        hand.splice(handIdx, 1);
+        if (game.deck.length > 0) {
+          hand.push(game.deck.pop());
+        }
+        game.cardsUsed++;
+        game.previewPlacement = null;
+        document.getElementById('btn-confirm-placement').classList.add('hidden');
+
+        const afterExitsList = getOpenExitsList();
+        const afterExits = afterExitsList.length;
+
+        if (afterExits < beforeExits) {
+          audio.playSfx('lock');
+          cells.forEach(c => spawnLockParticles(c.gx, c.gy));
+          showToast(`🔒 Saída bloqueada! (${afterExits} abertas restantes)`);
+        } else {
+          audio.playSfx('place');
+        }
+
+        // Verifica vitória ou derrota
+        if (afterExits === 0) {
+          endGame(true);
+          return true;
+        }
+
+        const totalCardsRemaining = game.deck.length + game.hands.reduce((acc, h) => acc + h.length, 0);
+        if (totalCardsRemaining === 0) {
+          endGame(false);
+          return true;
+        }
+
+        advanceTurn(playerIdx);
+        updateHud();
+        renderHand();
+
+        if (game.mode === 'p2p' && game.p2p.conn && game.p2p.conn.open) {
+          sendP2pSnapshot();
+        }
+
+        // Se modo Bot IA e agora é a vez do Bot (jogador 1)
+        if (game.mode === 'bot' && !game.gameOver && game.currentPlayer === 1) {
+          setTimeout(runBotTurn, 650);
+        }
+
+        return true;
+      }
+
+      function advanceTurn(justPlayedPlayer) {
+        if (game.playerCount <= 1) {
+          game.currentPlayer = 0;
+          game.selectedHandIdx = Math.min(game.selectedHandIdx, Math.max(0, game.hands[0].length - 1));
+          return;
+        }
+
+        game.currentPlayer = (justPlayedPlayer + 1) % game.playerCount;
+        game.selectedHandIdx = 0;
+
+        if (game.mode === 'family' && game.familyPrivacy && !game.gameOver) {
+          const pName = getPlayerLabel(game.currentPlayer);
+          document.getElementById('pass-turn-player-title').textContent = `VEZ DE ${pName.toUpperCase()}`;
+          document.getElementById('pass-turn-overlay').classList.remove('hidden');
+        }
+      }
+
+      function passHandCard(playerIdx, handIdx) {
+        const hand = game.hands[playerIdx];
+        if (!hand || !hand[handIdx]) return;
+        const discarded = hand.splice(handIdx, 1)[0];
+        // Recicla carta para o fundo do baralho e compra uma nova se houver
+        game.deck.unshift(discarded);
+        if (game.deck.length > 0) {
+          hand.push(game.deck.pop());
+        }
+        audio.playSfx('rotate');
+        game.previewPlacement = null;
+        document.getElementById('btn-confirm-placement').classList.add('hidden');
+        advanceTurn(playerIdx);
+        updateHud();
+        renderHand();
+        showToast('⏭️ Carta trocada no baralho e turno avançado.');
+
+        if (game.mode === 'bot' && !game.gameOver && game.currentPlayer === 1) {
+          setTimeout(runBotTurn, 650);
+        }
+      }
+
+      /* -------------------------------------------------------------------
+         8. BOT IA COOPERATIVO (PRIORIZA FECHAR SAÍDAS SEM ABRIR RAMOS EXTRAS)
+         ------------------------------------------------------------------- */
+      function runBotTurn() {
+        if (game.gameOver || game.mode !== 'bot' || game.currentPlayer !== 1) return;
+        const botHand = game.hands[1] || [];
+        const baseOpen = getOpenExitsList().length;
+
+        let bestMove = null;
+        let bestScore = -Infinity;
+
+        for (let hIdx = 0; hIdx < botHand.length; hIdx++) {
+          const card = botHand[hIdx];
+          const moves = findAllValidPlacements(card);
+          for (const m of moves) {
+            const cells = getCardFootprintCells(card, m.gx, m.gy, m.rot);
+            // Simula temporariamente
+            const addedKeys = [];
+            for (const c of cells) {
+              const k = cellKey(c.gx, c.gy);
+              if (!game.board.has(k)) {
+                game.board.set(k, { gx: c.gx, gy: c.gy, edges: c.edges, kind: c.kind });
+                addedKeys.push(k);
+              }
+            }
+            const nextOpen = getOpenExitsList().length;
+            // Reverte simulação
+            addedKeys.forEach(k => game.board.delete(k));
+
+            const deltaClosed = baseOpen - nextOpen; // Positivo = reduziu saídas abertas
+            const score = deltaClosed * 100 - nextOpen * 8 + Math.random() * 2;
+            if (score > bestScore) {
+              bestScore = score;
+              bestMove = { hIdx, gx: m.gx, gy: m.gy, rot: m.rot };
+            }
+          }
+        }
+
+        if (bestMove) {
+          commitPlacement(1, bestMove.hIdx, bestMove.gx, bestMove.gy, bestMove.rot);
+        } else if (botHand.length > 0) {
+          passHandCard(1, 0);
+        } else {
+          advanceTurn(1);
+          updateHud();
+        }
+      }
+
+      function endGame(won) {
+        game.gameOver = true;
+        const openExits = getOpenExitsList().length;
+        const badge = document.getElementById('gameover-badge');
+        const summary = document.getElementById('gameover-summary');
+        document.getElementById('go-open-exits').textContent = String(openExits);
+        document.getElementById('go-cards-used').textContent = String(game.cardsUsed);
+
+        if (won) {
+          audio.playSfx('win');
+          badge.textContent = 'FUGITIVO CONTIDO!';
+          badge.className = 'inline-block font-comic text-4xl px-4 py-1 rounded-2xl bg-emerald-400 border-2 border-stone-900';
+          summary.textContent = `Parabéns, ${game.profile.name}! Todas as saídas da Cela Nº 13 foram bloqueadas usando ${game.cardsUsed} cartas.`;
+        } else {
+          audio.playSfx('lose');
+          badge.textContent = 'FUGA CONCLUÍDA!';
+          badge.className = 'inline-block font-comic text-4xl px-4 py-1 rounded-2xl bg-rose-500 text-white border-2 border-stone-900';
+          summary.textContent = `O baralho acabou antes de fechar todas as ${openExits} saídas abertas. Tente novamente com bloqueios mais diretos!`;
+        }
+        document.getElementById('gameover-modal').classList.remove('hidden');
+      }
+
+      /* -------------------------------------------------------------------
+         9. SALA ONLINE P2P VIA PEERJS (CÓDIGO DE 4 LETRAS + FALLBACK SEGURO)
+         ------------------------------------------------------------------- */
+      function generateRoomCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 4; i++) {
+          code += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return code;
+      }
+
+      function setP2pStatus(text, ok = false) {
+        const el = document.getElementById('p2p-connection-status');
+        if (!el) return;
+        el.textContent = text;
+        el.className = ok
+          ? 'font-mono-code text-[10px] font-extrabold px-2 py-0.5 rounded bg-emerald-600 text-white'
+          : 'font-mono-code text-[10px] font-extrabold px-2 py-0.5 rounded bg-stone-800 text-amber-200';
+      }
+
+      function destroyP2p() {
+        try {
+          if (game.p2p.conn) game.p2p.conn.close();
+          if (game.p2p.peer) game.p2p.peer.destroy();
+        } catch (_) {}
+        game.p2p.conn = null;
+        game.p2p.peer = null;
+      }
+
+      function bindP2pConnection(conn) {
+        game.p2p.conn = conn;
+        conn.on('open', () => {
+          setP2pStatus(`CONECTADO • ${game.p2p.roomCode}`, true);
+          showToast(`📡 Conectado à sala ${game.p2p.roomCode}!`);
+          if (game.p2p.isHost) sendP2pSnapshot();
+        });
+        conn.on('data', data => {
+          if (data && data.type === 'snapshot') {
+            applyP2pSnapshot(data.payload);
+          }
+        });
+        conn.on('close', () => {
+          setP2pStatus('PARCEIRO SAIU', false);
+        });
+      }
+
+      function sendP2pSnapshot() {
+        try {
+          if (!game.p2p.conn || !game.p2p.conn.open) return;
+          game.p2p.conn.send({
+            type: 'snapshot',
+            payload: {
+              boardEntries: Array.from(game.board.entries()),
+              deck: game.deck,
+              hands: game.hands,
+              currentPlayer: game.currentPlayer,
+              cardsUsed: game.cardsUsed
+            }
+          });
+        } catch (_) {}
+      }
+
+      function applyP2pSnapshot(p) {
+        if (!p) return;
+        game.board = new Map(p.boardEntries || []);
+        game.deck = p.deck || [];
+        game.hands = p.hands || [[]];
+        game.currentPlayer = p.currentPlayer || 0;
+        game.cardsUsed = p.cardsUsed || 0;
+        game.previewPlacement = null;
+        document.getElementById('btn-confirm-placement').classList.add('hidden');
+        updateHud();
+        renderHand();
+      }
+
+      function createP2pRoom() {
+        if (typeof window.Peer === 'undefined') {
+          showToast('⚠️ Modo P2P requer conexão com o servidor PeerJS. Use Solo, Bot ou Família offline.');
+          return;
+        }
+        destroyP2p();
+        const code = generateRoomCode();
+        game.p2p.roomCode = code;
+        game.p2p.isHost = true;
+        setP2pStatus('CRIANDO...', false);
+
+        try {
+          const peer = new window.Peer(`fuga-cela-${code}`);
+          game.p2p.peer = peer;
+          peer.on('open', () => {
+            setP2pStatus(`AGUARDANDO (${code})`, true);
+            document.getElementById('p2p-room-share-row').classList.remove('hidden');
+            document.getElementById('p2p-active-code').textContent = code;
+            startNewMatch(false);
+          });
+          peer.on('connection', conn => bindP2pConnection(conn));
+          peer.on('error', () => setP2pStatus('ERRO P2P', false));
+        } catch (_) {
+          setP2pStatus('INDISPONÍVEL', false);
+        }
+      }
+
+      function joinP2pRoom(rawCode) {
+        const code = String(rawCode || '').trim().toUpperCase();
+        if (code.length !== 4) {
+          showToast('Digite o código de 4 letras da sala.');
+          return;
+        }
+        if (typeof window.Peer === 'undefined') {
+          showToast('⚠️ PeerJS indisponível neste ambiente.');
+          return;
+        }
+        destroyP2p();
+        game.p2p.roomCode = code;
+        game.p2p.isHost = false;
+        setP2pStatus('CONECTANDO...', false);
+
+        try {
+          const peer = new window.Peer();
+          game.p2p.peer = peer;
+          peer.on('open', () => {
+            const conn = peer.connect(`fuga-cela-${code}`);
+            bindP2pConnection(conn);
+          });
+          peer.on('error', () => setP2pStatus('FALHA AO ENTRAR', false));
+        } catch (_) {
+          setP2pStatus('INDISPONÍVEL', false);
+        }
+      }
+
+      /* -------------------------------------------------------------------
+         10. RENDERIZAÇÃO VETORIAL HQ (CANVAS + CARTAS DA MÃO)
+         ------------------------------------------------------------------- */
+      const CELL_PX = 92;
+
+      function getCssVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      }
+
+      function drawSingleCellArtwork(ctx, x, y, w, h, edges, kind, isCellCell) {
+        const soilDark = getCssVar('--soil-dark') || '#291D16';
+        const soilMid = getCssVar('--soil-mid') || '#422D20';
+        const sand = getCssVar('--tunnel-sand') || '#FDE68A';
+        const glow = getCssVar('--tunnel-glow') || '#F59E0B';
+        const wood = getCssVar('--beam-wood') || '#B45309';
+        const brick = getCssVar('--brick-red') || '#B91C1C';
+        const ink = getCssVar('--panel-border') || '#1C1917';
+
+        // Fundo de terra / rocha
+        ctx.fillStyle = soilDark;
+        ctx.fillRect(x, y, w, h);
+
+        // Textura sutil de pedrinhas/terra
+        ctx.fillStyle = soilMid;
+        ctx.fillRect(x + w * 0.1, y + h * 0.12, w * 0.16, h * 0.12);
+        ctx.fillRect(x + w * 0.68, y + h * 0.66, w * 0.18, h * 0.12);
+
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const tunnelW = Math.max(10, w * 0.34);
+
+        // Desenha túneis abertos e becos sem saída
+        const openDirs = [];
+        edges.forEach((edge, d) => {
+          if (edge === 'tunnel') {
+            openDirs.push(d);
+            ctx.fillStyle = glow;
+            ctx.strokeStyle = sand;
+            ctx.lineWidth = Math.max(1.5, w * 0.03);
+
+            if (d === 0) { // Norte
+              ctx.fillRect(cx - tunnelW / 2, y, tunnelW, h / 2 + tunnelW / 2);
+              ctx.strokeRect(cx - tunnelW / 2 + 2, y, tunnelW - 4, h / 2 + tunnelW / 2 - 2);
+            } else if (d === 1) { // Leste
+              ctx.fillRect(cx - tunnelW / 2, cy - tunnelW / 2, w / 2 + tunnelW / 2, tunnelW);
+              ctx.strokeRect(cx - tunnelW / 2 + 2, cy - tunnelW / 2 + 2, w / 2 + tunnelW / 2 - 2, tunnelW - 4);
+            } else if (d === 2) { // Sul
+              ctx.fillRect(cx - tunnelW / 2, cy - tunnelW / 2, tunnelW, h / 2 + tunnelW / 2);
+              ctx.strokeRect(cx - tunnelW / 2 + 2, cy - tunnelW / 2 + 2, tunnelW - 4, h / 2 + tunnelW / 2 - 2);
+            } else if (d === 3) { // Oeste
+              ctx.fillRect(x, cy - tunnelW / 2, w / 2 + tunnelW / 2, tunnelW);
+              ctx.strokeRect(x, cy - tunnelW / 2 + 2, w / 2 + tunnelW / 2 - 2, tunnelW - 4);
+            }
+          } else if (edge === 'end') {
+            // Beco sem saída com muro de tijolos + cadeado/barricada
+            ctx.fillStyle = brick;
+            ctx.strokeStyle = ink;
+            ctx.lineWidth = Math.max(1.5, w * 0.03);
+            const bw = tunnelW * 1.15;
+            const bh = Math.max(8, h * 0.2);
+
+            let bx = cx - bw / 2;
+            let by = cy - bh / 2;
+            if (d === 0) { bx = cx - bw / 2; by = y + 2; }
+            else if (d === 1) { bx = x + w - bh - 2; by = cy - bw / 2; const tmp = bw; ctx.fillRect(bx, by, bh, tmp); ctx.strokeRect(bx, by, bh, tmp); }
+            else if (d === 2) { bx = cx - bw / 2; by = y + h - bh - 2; }
+            else if (d === 3) { bx = x + 2; by = cy - bw / 2; const tmp = bw; ctx.fillRect(bx, by, bh, tmp); ctx.strokeRect(bx, by, bh, tmp); }
+
+            if (d === 0 || d === 2) {
+              ctx.fillRect(bx, by, bw, bh);
+              ctx.strokeRect(bx, by, bw, bh);
+            }
+
+            // Selo de bloqueio dourado
+            ctx.fillStyle = '#FACC15';
+            ctx.beginPath();
+            ctx.arc(cx, cy, Math.max(5, w * 0.11), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+        });
+
+        // Centro do túnel / viga de madeira
+        if (openDirs.length > 0 && !isCellCell) {
+          ctx.fillStyle = sand;
+          ctx.beginPath();
+          ctx.arc(cx, cy, tunnelW * 0.48, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Viga transversal de madeira
+          ctx.fillStyle = wood;
+          ctx.strokeStyle = ink;
+          ctx.lineWidth = 1.5;
+          ctx.fillRect(cx - tunnelW * 0.55, cy - Math.max(2, h * 0.045), tunnelW * 1.1, Math.max(4, h * 0.09));
+          ctx.strokeRect(cx - tunnelW * 0.55, cy - Math.max(2, h * 0.045), tunnelW * 1.1, Math.max(4, h * 0.09));
+        }
+
+        // Ilustração especial da "CELA Nº 13" com fugitivo listrado atrás das grades
+        if (isCellCell) {
+          ctx.fillStyle = '#FEF3C7';
+          ctx.fillRect(x + 4, y + 4, w - 8, h - 8);
+
+          if (kind === 'cellLeft') {
+            // Fugitivo listrado (preto e branco) + máscara
+            const fx = cx;
+            const fy = cy + 3;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(fx, fy - 8, 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = ink;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Máscara preta de bandido
+            ctx.fillStyle = '#1C1917';
+            ctx.fillRect(fx - 8, fy - 11, 16, 5);
+
+            // Corpo listrado
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(fx - 9, fy + 1, 18, 13);
+            ctx.fillStyle = '#1C1917';
+            ctx.fillRect(fx - 9, fy + 3, 18, 3);
+            ctx.fillRect(fx - 9, fy + 9, 18, 3);
+            ctx.strokeRect(fx - 9, fy + 1, 18, 13);
+          } else {
+            // Placa "CELA Nº 13"
+            ctx.fillStyle = '#DC2626';
+            ctx.fillRect(x + 8, cy - 13, w - 16, 26);
+            ctx.strokeStyle = ink;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x + 8, cy - 13, w - 16, 26);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 10px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('CELA Nº 13', cx, cy + 1);
+          }
+
+          // Grades verticais sobre a cela
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 2.5;
+          for (let barX = x + 12; barX < x + w - 6; barX += 11) {
+            ctx.beginPath();
+            ctx.moveTo(barX, y + 4);
+            ctx.lineTo(barX, y + h - 4);
+            ctx.stroke();
+          }
+        }
+
+        // Borda em tinta preta de HQ
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(x, y, w, h);
+      }
+
+      function renderHand() {
+        const container = document.getElementById('hand-cards-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        const hand = game.hands[game.currentPlayer] || [];
+        if (game.selectedHandIdx >= hand.length) {
+          game.selectedHandIdx = Math.max(0, hand.length - 1);
+        }
+
+        hand.forEach((card, idx) => {
+          const slot = document.createElement('div');
+          slot.className = `hand-card-slot ${idx === game.selectedHandIdx ? 'selected' : ''}`;
+
+          const cnv = document.createElement('canvas');
+          cnv.width = 96;
+          cnv.height = 78;
+          cnv.className = 'w-full h-full block pointer-events-none';
+          const ctx = cnv.getContext('2d');
+          const r = ((game.rotation % 4) + 4) % 4;
+          const e0 = rotateEdges(card.c0.edges, r);
+          const e1 = rotateEdges(card.c1.edges, r);
+          drawSingleCellArtwork(ctx, 2, 2, 45, 74, e0, card.c0.kind, false);
+          drawSingleCellArtwork(ctx, 49, 2, 45, 74, e1, card.c1.kind, false);
+
+          slot.appendChild(cnv);
+
+          // Toque simples seleciona; toque duplo gira +90°; arraste inicia Drag & Drop magnético no mapa
+          let pointerDownTime = 0;
+          let startX = 0;
+          let startY = 0;
+          let isDraggingCard = false;
+
+          slot.addEventListener('pointerdown', e => {
+            if (game.gameOver) return;
+            if (game.mode === 'bot' && game.currentPlayer === 1) return;
+            audio.ensureContext();
+            startX = e.clientX;
+            startY = e.clientY;
+            isDraggingCard = false;
+            game.selectedHandIdx = idx;
+            renderHand();
+            try { slot.setPointerCapture(e.pointerId); } catch (_) {}
+          });
+
+          slot.addEventListener('pointermove', e => {
+            if (startX === 0 && startY === 0) return;
+            const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+            if (dist > 12) {
+              isDraggingCard = true;
+              updatePreviewFromScreenPoint(e.clientX, e.clientY);
+            }
+          });
+
+          slot.addEventListener('pointerup', e => {
+            try { slot.releasePointerCapture(e.pointerId); } catch (_) {}
+            const now = Date.now();
+            if (isDraggingCard) {
+              updatePreviewFromScreenPoint(e.clientX, e.clientY);
+              if (game.previewPlacement && game.previewPlacement.valid) {
+                commitPlacement(
+                  game.currentPlayer,
+                  idx,
+                  game.previewPlacement.gx,
+                  game.previewPlacement.gy,
+                  game.previewPlacement.rot
+                );
+              }
+            } else {
+              // Detecta duplo toque para girar +90°
+              if (now - pointerDownTime < 290) {
+                rotateCurrentSelection(1);
+                pointerDownTime = 0;
+              } else {
+                pointerDownTime = now;
+              }
+            }
+            startX = 0;
+            startY = 0;
+            isDraggingCard = false;
+          });
+
+          container.appendChild(slot);
+        });
+
+        document.getElementById('hand-rotation-badge').textContent = `${((game.rotation % 4) + 4) % 4 * 90}°`;
+      }
+
+      function rotateCurrentSelection(deltaSteps) {
+        game.rotation = (((game.rotation + deltaSteps) % 4) + 4) % 4;
+        audio.playSfx('rotate');
+        renderHand();
+        if (game.previewPlacement) {
+          const card = (game.hands[game.currentPlayer] || [])[game.selectedHandIdx];
+          if (card) {
+            const valid = isPlacementValid(card, game.previewPlacement.gx, game.previewPlacement.gy, game.rotation);
+            game.previewPlacement = {
+              gx: game.previewPlacement.gx,
+              gy: game.previewPlacement.gy,
+              rot: game.rotation,
+              valid
+            };
+            document.getElementById('btn-confirm-placement').classList.toggle('hidden', !valid);
+          }
+        }
+      }
+
+      function screenToGrid(clientX, clientY) {
+        const canvas = document.getElementById('board-canvas');
+        const rect = canvas.getBoundingClientRect();
+        const sx = clientX - rect.left;
+        const sy = clientY - rect.top;
+        const worldX = (sx - game.cam.x) / game.cam.zoom;
+        const worldY = (sy - game.cam.y) / game.cam.zoom;
+        return {
+          gx: Math.floor(worldX / CELL_PX),
+          gy: Math.floor(worldY / CELL_PX)
+        };
+      }
+
+      function updatePreviewFromScreenPoint(clientX, clientY) {
+        const card = (game.hands[game.currentPlayer] || [])[game.selectedHandIdx];
+        if (!card) return;
+        const pt = screenToGrid(clientX, clientY);
+        let targetGx = pt.gx;
+        let targetGy = pt.gy;
+        let valid = isPlacementValid(card, targetGx, targetGy, game.rotation);
+
+        // Encaixe magnético: se próximo a uma posição válida, atrai para ela
+        if (!valid) {
+          const validMoves = findAllValidPlacements(card);
+          let best = null;
+          let bestDist = Infinity;
+          for (const m of validMoves) {
+            if (m.rot !== game.rotation) continue;
+            const d = Math.hypot(m.gx - pt.gx, m.gy - pt.gy);
+            if (d < bestDist && d <= 1.65) {
+              bestDist = d;
+              best = m;
+            }
+          }
+          if (best) {
+            targetGx = best.gx;
+            targetGy = best.gy;
+            valid = true;
+          }
+        }
+
+        game.previewPlacement = { gx: targetGx, gy: targetGy, rot: game.rotation, valid };
+        document.getElementById('btn-confirm-placement').classList.toggle('hidden', !valid);
+      }
+
+      function centerCameraOnCell(gx, gy) {
+        const canvas = document.getElementById('board-canvas');
+        const w = canvas.clientWidth || 360;
+        const h = canvas.clientHeight || 420;
+        game.cam.x = w / 2 - (gx + 0.5) * CELL_PX * game.cam.zoom;
+        game.cam.y = h / 2 - (gy + 0.5) * CELL_PX * game.cam.zoom;
+        game.cam.vx = 0;
+        game.cam.vy = 0;
+      }
+
+      function renderBoardFrame() {
+        const canvas = document.getElementById('board-canvas');
+        if (!canvas) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const cssW = canvas.clientWidth;
+        const cssH = canvas.clientHeight;
+        if (cssW > 0 && cssH > 0 && (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr))) {
+          canvas.width = Math.round(cssW * dpr);
+          canvas.height = Math.round(cssH * dpr);
+        }
+
+        const ctx = canvas.getContext('2d');
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, cssW, cssH);
+
+        // Aplica câmera com pan e zoom
+        ctx.translate(game.cam.x, game.cam.y);
+        ctx.scale(game.cam.zoom, game.cam.zoom);
+
+        // Grade sutil de referência no espaço do mundo
+        const step = CELL_PX;
+        const startGx = Math.floor((-game.cam.x / game.cam.zoom) / step) - 1;
+        const endGx = Math.ceil(((cssW - game.cam.x) / game.cam.zoom) / step) + 1;
+        const startGy = Math.floor((-game.cam.y / game.cam.zoom) / step) - 1;
+        const endGy = Math.ceil(((cssH - game.cam.y) / game.cam.zoom) / step) + 1;
+
+        ctx.strokeStyle = getCssVar('--grid-line') || 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        for (let gx = startGx; gx <= endGx; gx++) {
+          ctx.beginPath();
+          ctx.moveTo(gx * step, startGy * step);
+          ctx.lineTo(gx * step, endGy * step);
+          ctx.stroke();
+        }
+        for (let gy = startGy; gy <= endGy; gy++) {
+          ctx.beginPath();
+          ctx.moveTo(startGx * step, gy * step);
+          ctx.lineTo(endGx * step, gy * step);
+          ctx.stroke();
+        }
+
+        // Desenha peças já colocadas
+        game.board.forEach(cell => {
+          drawSingleCellArtwork(
+            ctx,
+            cell.gx * step,
+            cell.gy * step,
+            step,
+            step,
+            cell.edges,
+            cell.kind,
+            !!cell.isCellCell
+          );
+        });
+
+        // Destaca saídas abertas com marcador pulsante
+        const pulse = 0.55 + 0.35 * Math.sin(Date.now() * 0.007);
+        const exits = getOpenExitsList();
+        exits.forEach(ex => {
+          const tx = (ex.targetGx + 0.5) * step;
+          const ty = (ex.targetGy + 0.5) * step;
+          ctx.save();
+          ctx.strokeStyle = `rgba(250, 204, 21, ${pulse})`;
+          ctx.lineWidth = 3;
+          ctx.setLineDash([6, 4]);
+          ctx.strokeRect(ex.targetGx * step + 4, ex.targetGy * step + 4, step - 8, step - 8);
+          ctx.fillStyle = `rgba(220, 38, 38, ${pulse})`;
+          ctx.beginPath();
+          ctx.arc(tx, ty, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // Desenha pré-visualização da carta (Ghost Placement)
+        if (game.previewPlacement) {
+          const card = (game.hands[game.currentPlayer] || [])[game.selectedHandIdx];
+          if (card) {
+            const pCells = getCardFootprintCells(card, game.previewPlacement.gx, game.previewPlacement.gy, game.previewPlacement.rot);
+            ctx.save();
+            ctx.globalAlpha = 0.72;
+            pCells.forEach(c => {
+              drawSingleCellArtwork(ctx, c.gx * step, c.gy * step, step, step, c.edges, c.kind, false);
+              ctx.strokeStyle = game.previewPlacement.valid ? '#22C55E' : '#EF4444';
+              ctx.lineWidth = 4;
+              ctx.strokeRect(c.gx * step + 2, c.gy * step + 2, step - 4, step - 4);
+            });
+            ctx.restore();
+          }
+        }
+
+        // Atualiza e desenha partículas de bloqueio
+        for (let i = game.particles.length - 1; i >= 0; i--) {
+          const pt = game.particles[i];
+          pt.x += pt.vx;
+          pt.y += pt.vy;
+          pt.life -= 0.032;
+          if (pt.life <= 0) {
+            game.particles.splice(i, 1);
+            continue;
+          }
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, pt.life);
+          ctx.fillStyle = pt.color;
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        ctx.restore();
+      }
+
+      /* -------------------------------------------------------------------
+         11. GESTOS TÁTEIS E DE MOUSE NO TABULEIRO (PAN, INÉRCIA, PINÇA & GIRO)
+         ------------------------------------------------------------------- */
+      function setupBoardGestures() {
+        const canvas = document.getElementById('board-canvas');
+        if (!canvas) return;
+
+        let isPanning = false;
+        let lastX = 0;
+        let lastY = 0;
+        let lastTapTime = 0;
+        let pinchStartDist = 0;
+        let pinchStartZoom = 1;
+        let pinchStartAngle = 0;
+        let pinchAccumRot = 0;
+
+        function getTouchDistAndAngle(t1, t2) {
+          const dx = t2.clientX - t1.clientX;
+          const dy = t2.clientY - t1.clientY;
+          return {
+            dist: Math.hypot(dx, dy),
+            angle: Math.atan2(dy, dx)
+          };
+        }
+
+        canvas.addEventListener('touchstart', e => {
+          audio.ensureContext();
+          if (e.touches.length === 2) {
+            isPanning = false;
+            const info = getTouchDistAndAngle(e.touches[0], e.touches[1]);
+            pinchStartDist = info.dist || 1;
+            pinchStartZoom = game.cam.zoom;
+            pinchStartAngle = info.angle;
+            pinchAccumRot = 0;
+          } else if (e.touches.length === 1) {
+            const t = e.touches[0];
+            const now = Date.now();
+            if (now - lastTapTime < 280) {
+              // Toque duplo no tabuleiro gira a carta selecionada +90°
+              rotateCurrentSelection(1);
+              lastTapTime = 0;
+            } else {
+              lastTapTime = now;
+            }
+            isPanning = true;
+            lastX = t.clientX;
+            lastY = t.clientY;
+            game.cam.vx = 0;
+            game.cam.vy = 0;
+          }
+        }, { passive: true });
+
+        canvas.addEventListener('touchmove', e => {
+          if (e.touches.length === 2) {
+            const info = getTouchDistAndAngle(e.touches[0], e.touches[1]);
+            const scale = info.dist / pinchStartDist;
+            const nextZoom = Math.min(game.cam.maxZoom, Math.max(game.cam.minZoom, pinchStartZoom * scale));
+
+            // Zoom centrado entre os dois dedos
+            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            const ratio = nextZoom / game.cam.zoom;
+            game.cam.x = midX - (midX - game.cam.x) * ratio;
+            game.cam.y = midY - (midY - game.cam.y) * ratio;
+            game.cam.zoom = nextZoom;
+
+            // Giro de 2 dedos (twist) acumula até ±0.75 rad para rotacionar 90°
+            let deltaAngle = info.angle - pinchStartAngle;
+            while (deltaAngle > Math.PI) deltaAngle -= Math.PI * 2;
+            while (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
+            pinchAccumRot += deltaAngle;
+            pinchStartAngle = info.angle;
+
+            if (pinchAccumRot > 0.72) {
+              rotateCurrentSelection(1);
+              pinchAccumRot = 0;
+            } else if (pinchAccumRot < -0.72) {
+              rotateCurrentSelection(-1);
+              pinchAccumRot = 0;
+            }
+          } else if (e.touches.length === 1 && isPanning) {
+            const t = e.touches[0];
+            const dx = t.clientX - lastX;
+            const dy = t.clientY - lastY;
+            game.cam.x += dx;
+            game.cam.y += dy;
+            game.cam.vx = dx;
+            game.cam.vy = dy;
+            lastX = t.clientX;
+            lastY = t.clientY;
+          }
+        }, { passive: true });
+
+        canvas.addEventListener('touchend', e => {
+          if (e.touches.length < 2) {
+            pinchStartDist = 0;
+          }
+          if (e.touches.length === 0) {
+            isPanning = false;
+          }
+        }, { passive: true });
+
+        // Suporte a mouse / trackpad no desktop
+        canvas.addEventListener('mousedown', e => {
+          if (e.button !== 0) return;
+          audio.ensureContext();
+          isPanning = true;
+          lastX = e.clientX;
+          lastY = e.clientY;
+          game.cam.vx = 0;
+          game.cam.vy = 0;
+        });
+
+        window.addEventListener('mousemove', e => {
+          if (!isPanning) return;
+          const dx = e.clientX - lastX;
+          const dy = e.clientY - lastY;
+          game.cam.x += dx;
+          game.cam.y += dy;
+          game.cam.vx = dx;
+          game.cam.vy = dy;
+          lastX = e.clientX;
+          lastY = e.clientY;
+        });
+
+        window.addEventListener('mouseup', () => {
+          isPanning = false;
+        });
+
+        canvas.addEventListener('click', e => {
+          if (game.gameOver) return;
+          if (game.mode === 'bot' && game.currentPlayer === 1) return;
+          updatePreviewFromScreenPoint(e.clientX, e.clientY);
+        });
+
+        canvas.addEventListener('wheel', e => {
+          e.preventDefault();
+          const factor = e.deltaY < 0 ? 1.12 : 0.89;
+          const nextZoom = Math.min(game.cam.maxZoom, Math.max(game.cam.minZoom, game.cam.zoom * factor));
+          const ratio = nextZoom / game.cam.zoom;
+          game.cam.x = e.clientX - (e.clientX - game.cam.x) * ratio;
+          game.cam.y = e.clientY - (e.clientY - game.cam.y) * ratio;
+          game.cam.zoom = nextZoom;
+        }, { passive: false });
+      }
+
+      /* -------------------------------------------------------------------
+         12. HUD, PERFIL, MODAIS & LOOP PRINCIPAL DE ANIMAÇÃO
+         ------------------------------------------------------------------- */
+      function getPlayerLabel(idx) {
+        if (idx === 0) return game.profile.name || 'Agente';
+        if (game.mode === 'bot') return 'Agente Bot IA';
+        if (game.mode === 'p2p') return 'Parceiro P2P';
+        return `Jogador ${idx + 1}`;
+      }
+
+      function updateHud() {
+        document.getElementById('header-agent-name').textContent = game.profile.name || 'Agente';
+        const avatarBox = document.getElementById('header-avatar');
+        if (game.profile.avatar && game.profile.avatar.startsWith('data:image')) {
+          avatarBox.innerHTML = `<img src="${game.profile.avatar}" alt="Avatar" class="w-full h-full object-cover" />`;
+        } else {
+          avatarBox.innerHTML = game.profile.avatar || PRESET_AVATARS[0].svg;
+        }
+
+        const modeMap = {
+          solo: 'SOLO',
+          bot: 'DUPLA + BOT',
+          family: `FAMÍLIA ${game.familyCount}P`,
+          p2p: game.p2p.roomCode ? `P2P:${game.p2p.roomCode}` : 'P2P'
+        };
+        document.getElementById('header-mode-badge').textContent = modeMap[game.mode] || 'SOLO';
+        document.getElementById('deck-count-label').textContent = String(game.deck.length);
+
+        const openExits = getOpenExitsList().length;
+        document.getElementById('open-exits-count').textContent = String(openExits);
+
+        const activePlayerName = getPlayerLabel(game.currentPlayer);
+        document.getElementById('turn-status-text').textContent =
+          `Vez de ${activePlayerName} • Feche todas as ${openExits} saídas abertas!`;
+      }
+
+      function applyTheme(themeKey) {
+        const key = Object.prototype.hasOwnProperty.call(THEMES, themeKey) ? themeKey : 'classic';
+        game.prefs.theme = key;
+        const themeObj = THEMES[key];
+        Object.entries(themeObj.vars).forEach(([k, v]) => {
+          document.documentElement.style.setProperty(k, v);
+        });
+        SafeStore.set(STORAGE_PREFS, JSON.stringify(game.prefs));
+        renderThemeButtons();
+      }
+
+      function renderThemeButtons() {
+        const grid = document.getElementById('theme-buttons-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        Object.entries(THEMES).forEach(([key, t]) => {
+          const active = game.prefs.theme === key;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `comic-btn px-3 py-2 rounded-xl text-xs font-extrabold text-left ${active ? 'bg-amber-400 text-stone-950' : 'bg-amber-100 text-stone-950'}`;
+          btn.textContent = t.label + (active ? ' ✓' : '');
+          btn.addEventListener('click', () => {
+            applyTheme(key);
+            audio.playSfx('rotate');
+          });
+          grid.appendChild(btn);
+        });
+      }
+
+      function compressImageToAvatarBase64(source, isVideo = false) {
+        return new Promise(resolve => {
+          try {
+            const out = document.createElement('canvas');
+            const size = 128;
+            out.width = size;
+            out.height = size;
+            const ctx = out.getContext('2d');
+
+            if (isVideo) {
+              const vw = source.videoWidth || 240;
+              const vh = source.videoHeight || 240;
+              const side = Math.min(vw, vh);
+              ctx.drawImage(source, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, size, size);
+              resolve(out.toDataURL('image/jpeg', 0.72));
+              return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = ev => {
+              const img = new Image();
+              img.onload = () => {
+                const side = Math.min(img.width, img.height);
+                ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+                resolve(out.toDataURL('image/jpeg', 0.72));
+              };
+              img.onerror = () => resolve(game.profile.avatar);
+              img.src = ev.target.result;
+            };
+            reader.onerror = () => resolve(game.profile.avatar);
+            reader.readAsDataURL(source);
+          } catch (_) {
+            resolve(game.profile.avatar);
+          }
+        });
+      }
+
+      let camStream = null;
+      let camFacing = 'user';
+      let draftAvatar = PRESET_AVATARS[0].svg;
+
+      async function startCameraCapture() {
+        stopCameraCapture();
+        try {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast('📷 Câmera não disponível neste dispositivo.');
+            return;
+          }
+          camStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: camFacing },
+            audio: false
+          });
+          const video = document.getElementById('camera-video');
+          video.srcObject = camStream;
+          document.getElementById('camera-panel').classList.remove('hidden');
+        } catch (_) {
+          showToast('📷 Permissão de câmera negada ou indisponível.');
+        }
+      }
+
+      function stopCameraCapture() {
+        try {
+          if (camStream) {
+            camStream.getTracks().forEach(t => t.stop());
+            camStream = null;
+          }
+        } catch (_) {}
+        document.getElementById('camera-panel').classList.add('hidden');
+      }
+
+      function openProfileModal(firstRun = false) {
+        draftAvatar = game.profile.avatar || PRESET_AVATARS[0].svg;
+        document.getElementById('profile-name-input').value = game.profile.name || '';
+        document.getElementById('btn-close-profile').classList.toggle('hidden', firstRun);
+
+        const prev = document.getElementById('profile-avatar-preview');
+        if (draftAvatar.startsWith('data:image')) {
+          prev.innerHTML = `<img src="${draftAvatar}" alt="Preview" class="w-full h-full object-cover" />`;
+        } else {
+          prev.innerHTML = draftAvatar;
+        }
+
+        const grid = document.getElementById('preset-avatars-grid');
+        grid.innerHTML = '';
+        PRESET_AVATARS.forEach(item => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'comic-btn h-11 rounded-xl bg-amber-100 flex items-center justify-center';
+          b.innerHTML = item.svg;
+          b.addEventListener('click', () => {
+            draftAvatar = item.svg;
+            prev.innerHTML = item.svg;
+            audio.playSfx('rotate');
+          });
+          grid.appendChild(b);
+        });
+
+        document.getElementById('profile-modal').classList.remove('hidden');
+      }
+
+      function bindUiEvents() {
+        // Perfil
+        document.getElementById('btn-open-profile').addEventListener('click', () => openProfileModal(false));
+        document.getElementById('btn-close-profile').addEventListener('click', () => {
+          stopCameraCapture();
+          document.getElementById('profile-modal').classList.add('hidden');
+        });
+        document.getElementById('profile-gallery-input').addEventListener('change', async e => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          draftAvatar = await compressImageToAvatarBase64(file, false);
+          document.getElementById('profile-avatar-preview').innerHTML =
+            `<img src="${draftAvatar}" alt="Galeria" class="w-full h-full object-cover" />`;
+        });
+        document.getElementById('btn-open-camera').addEventListener('click', startCameraCapture);
+        document.getElementById('btn-flip-camera').addEventListener('click', () => {
+          camFacing = camFacing === 'user' ? 'environment' : 'user';
+          startCameraCapture();
+        });
+        document.getElementById('btn-capture-camera').addEventListener('click', async () => {
+          const vid = document.getElementById('camera-video');
+          draftAvatar = await compressImageToAvatarBase64(vid, true);
+          document.getElementById('profile-avatar-preview').innerHTML =
+            `<img src="${draftAvatar}" alt="Câmera" class="w-full h-full object-cover" />`;
+          stopCameraCapture();
+        });
+        document.getElementById('btn-cancel-camera').addEventListener('click', stopCameraCapture);
+        document.getElementById('btn-save-profile').addEventListener('click', () => {
+          const typed = document.getElementById('profile-name-input').value.trim();
+          game.profile = {
+            name: typed || 'Capitão Ferro',
+            avatar: draftAvatar
+          };
+          SafeStore.set(STORAGE_PROFILE, JSON.stringify(game.profile));
+          stopCameraCapture();
+          document.getElementById('profile-modal').classList.add('hidden');
+          updateHud();
+          audio.ensureContext();
+          if (game.prefs.music) audio.startMusicLoop();
+          audio.playSfx('lock');
+        });
+
+        // Cabeçalho: Modos, Tema, Música e SFX
+        document.getElementById('btn-open-modes').addEventListener('click', () => {
+          renderThemeButtons();
+          document.getElementById('modes-modal').classList.remove('hidden');
+        });
+        document.getElementById('btn-close-modes').addEventListener('click', () => {
+          document.getElementById('modes-modal').classList.add('hidden');
+        });
+        document.getElementById('btn-cycle-theme').addEventListener('click', () => {
+          const keys = Object.keys(THEMES);
+          const next = keys[(keys.indexOf(game.prefs.theme) + 1) % keys.length];
+          applyTheme(next);
+          audio.playSfx('rotate');
+          showToast(`Tema: ${THEMES[next].label}`);
+        });
+        document.getElementById('btn-toggle-music').addEventListener('click', () => {
+          game.prefs.music = !game.prefs.music;
+          audio.setMusic(game.prefs.music);
+          SafeStore.set(STORAGE_PREFS, JSON.stringify(game.prefs));
+          const btn = document.getElementById('btn-toggle-music');
+          btn.classList.toggle('opacity-45', !game.prefs.music);
+          showToast(game.prefs.music ? '🎵 Música Faroeste ativada' : '🔇 Música pausada');
+        });
+        document.getElementById('btn-toggle-sfx').addEventListener('click', () => {
+          game.prefs.sfx = !game.prefs.sfx;
+          audio.setSfx(game.prefs.sfx);
+          SafeStore.set(STORAGE_PREFS, JSON.stringify(game.prefs));
+          const btn = document.getElementById('btn-toggle-sfx');
+          btn.classList.toggle('opacity-45', !game.prefs.sfx);
+          if (game.prefs.sfx) audio.playSfx('rotate');
+        });
+
+        // Seleção de modos
+        document.querySelectorAll('.mode-select-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const m = btn.dataset.mode;
+            game.mode = m;
+            document.querySelectorAll('.mode-select-btn').forEach(b => {
+              b.classList.toggle('bg-amber-300', b.dataset.mode === m);
+              b.classList.toggle('bg-amber-100', b.dataset.mode !== m);
+            });
+            document.getElementById('family-config-box').classList.toggle('hidden', m !== 'family');
+            document.getElementById('p2p-config-box').classList.toggle('hidden', m !== 'p2p');
+            audio.playSfx('rotate');
+          });
+        });
+
+        document.querySelectorAll('.fam-cnt-btn').forEach(b => {
+          b.addEventListener('click', () => {
+            game.familyCount = Number(b.dataset.famCount) || 2;
+            document.querySelectorAll('.fam-cnt-btn').forEach(x => {
+              const sel = Number(x.dataset.famCount) === game.familyCount;
+              x.classList.toggle('bg-amber-400', sel);
+              x.classList.toggle('bg-amber-100', !sel);
+            });
+          });
+        });
+        document.getElementById('family-privacy-screen').addEventListener('change', e => {
+          game.familyPrivacy = !!e.target.checked;
+        });
+
+        // P2P Sala 4 letras
+        document.getElementById('btn-create-p2p-room').addEventListener('click', createP2pRoom);
+        document.getElementById('btn-join-p2p-room').addEventListener('click', () => {
+          joinP2pRoom(document.getElementById('p2p-join-code').value);
+        });
+        document.getElementById('btn-copy-p2p-link').addEventListener('click', () => {
+          const code = game.p2p.roomCode;
+          if (!code) return;
+          const url = `${window.location.origin}${window.location.pathname}?room=${code}`;
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = url;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showToast(`🔗 Link da sala ${code} copiado!`);
+          } catch (_) {
+            showToast(`Código da sala: ${code}`);
+          }
+        });
+
+        document.getElementById('btn-start-new-match').addEventListener('click', () => {
+          document.getElementById('modes-modal').classList.add('hidden');
+          startNewMatch(false);
+        });
+
+        // Controles da mão, rotação, confirmação, radar, desfazer e centralizar
+        document.getElementById('btn-rotate-ccw').addEventListener('click', () => rotateCurrentSelection(-1));
+        document.getElementById('btn-rotate-cw').addEventListener('click', () => rotateCurrentSelection(1));
+        document.getElementById('btn-pass-turn').addEventListener('click', () => {
+          if (game.gameOver) return;
+          if (game.mode === 'bot' && game.currentPlayer === 1) return;
+          passHandCard(game.currentPlayer, game.selectedHandIdx);
+        });
+
+        document.getElementById('btn-confirm-placement').addEventListener('click', () => {
+          if (!game.previewPlacement || !game.previewPlacement.valid) return;
+          commitPlacement(
+            game.currentPlayer,
+            game.selectedHandIdx,
+            game.previewPlacement.gx,
+            game.previewPlacement.gy,
+            game.previewPlacement.rot
+          );
+        });
+
+        document.getElementById('btn-radar-exits').addEventListener('click', () => {
+          const exits = getOpenExitsList();
+          if (exits.length === 0) return;
+          const target = exits[Math.floor(Math.random() * exits.length)];
+          centerCameraOnCell(target.targetGx, target.targetGy);
+          audio.playSfx('rotate');
+          showToast(`🔓 Foco em saída aberta (${exits.length} restantes)`);
+        });
+
+        document.getElementById('btn-center-board').addEventListener('click', () => {
+          centerCameraOnCell(0.5, 0);
+          audio.playSfx('rotate');
+        });
+
+        document.getElementById('btn-undo-move').addEventListener('click', () => {
+          if (game.history.length === 0 || game.gameOver) {
+            showToast('Nada para desfazer.');
+            return;
+          }
+          const snap = game.history.pop();
+          game.board = new Map(snap.boardEntries);
+          game.deck = snap.deck;
+          game.hands = snap.hands;
+          game.currentPlayer = snap.currentPlayer;
+          game.cardsUsed = snap.cardsUsed;
+          game.previewPlacement = null;
+          document.getElementById('btn-confirm-placement').classList.add('hidden');
+          audio.playSfx('rotate');
+          updateHud();
+          renderHand();
+        });
+
+        document.getElementById('btn-reveal-turn-hand').addEventListener('click', () => {
+          document.getElementById('pass-turn-overlay').classList.add('hidden');
+          renderHand();
+          audio.playSfx('rotate');
+        });
+
+        document.getElementById('btn-play-again').addEventListener('click', () => {
+          startNewMatch(false);
+        });
+      }
+
+      /* -------------------------------------------------------------------
+         13. LOOP PRINCIPAL & INICIALIZAÇÃO BLINDADA
+         ------------------------------------------------------------------- */
+      let animStarted = false;
+      function animationLoop() {
+        if (!animStarted) return;
+        try {
+          // Aplica inércia suave no pan
+          if (Math.abs(game.cam.vx) > 0.12 || Math.abs(game.cam.vy) > 0.12) {
+            game.cam.x += game.cam.vx;
+            game.cam.y += game.cam.vy;
+            game.cam.vx *= 0.88;
+            game.cam.vy *= 0.88;
+          }
+          renderBoardFrame();
+        } catch (_) {}
+        requestAnimationFrame(animationLoop);
+      }
+
+      let hasBooted = false;
+      function bootGame() {
+        if (hasBooted) return;
+        hasBooted = true;
+
+        try {
+          initPwaManifest();
+
+          const rawProfile = SafeStore.get(STORAGE_PROFILE);
+          let hasSavedProfile = false;
+          if (rawProfile) {
+            try {
+              const parsed = JSON.parse(rawProfile);
+              if (parsed && parsed.name) {
+                game.profile = parsed;
+                hasSavedProfile = true;
+              }
+            } catch (_) {}
+          }
+
+          const rawPrefs = SafeStore.get(STORAGE_PREFS);
+          if (rawPrefs) {
+            try {
+              const p = JSON.parse(rawPrefs);
+              game.prefs = { ...game.prefs, ...p };
+            } catch (_) {}
+          }
+
+          applyTheme(game.prefs.theme || 'classic');
+          audio.setMusic(game.prefs.music !== false);
+          audio.setSfx(game.prefs.sfx !== false);
+          document.getElementById('btn-toggle-music').classList.toggle('opacity-45', !game.prefs.music);
+          document.getElementById('btn-toggle-sfx').classList.toggle('opacity-45', !game.prefs.sfx);
+
+          bindUiEvents();
+          setupBoardGestures();
+          startNewMatch(false);
+
+          animStarted = true;
+          requestAnimationFrame(animationLoop);
+
+          // Verifica parâmetro ?room=ABCD na URL para entrada rápida em sala P2P
+          try {
+            const params = new URLSearchParams(window.location.search);
+            const roomParam = params.get('room');
+            if (roomParam && roomParam.trim().length === 4) {
+              game.mode = 'p2p';
+              document.getElementById('p2p-join-code').value = roomParam.trim().toUpperCase();
+              document.getElementById('family-config-box').classList.add('hidden');
+              document.getElementById('p2p-config-box').classList.remove('hidden');
+              document.getElementById('modes-modal').classList.remove('hidden');
+            }
+          } catch (_) {}
+
+          if (!hasSavedProfile) {
+            openProfileModal(true);
+          }
+        } catch (err) {
+          console.error('Falha na inicialização de Fuga da Cela:', err);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootGame);
+      } else {
+        bootGame();
+      }
+      setTimeout(bootGame, 120);
+    })();
+  </script>
+</body>
+</html>
